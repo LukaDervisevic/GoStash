@@ -14,13 +14,15 @@ type BalancedCache[K comparable, V any] struct {
 
 func NewBalancedCache[K comparable, V any](
 	TTLDuration time.Duration,
-	Cleanup time.Duration) *BalancedCache[K, V] {
+	CleanupDuration time.Duration) *BalancedCache[K, V] {
 
-	return &BalancedCache[K, V]{
-		Cache: *NewCache(TTLDuration, Cleanup),
+	cache := &BalancedCache[K, V]{
+		Cache: *NewCache(TTLDuration, CleanupDuration),
 		Mutex: &sync.RWMutex{},
 		Map:   make(map[K]CacheItem[V]),
 	}
+	go cache.CleanUp()
+	return cache
 }
 
 func (c *BalancedCache[K, V]) Get(key K) (CacheItem[V], bool) {
@@ -75,4 +77,31 @@ func (c *BalancedCache[K, V]) RefreshTTL(key K) {
 	c.Mutex.Lock()
 	defer c.Mutex.Unlock()
 	c.Map[key].TTL.Add(c.TTLDuration)
+}
+
+func (c *BalancedCache[K, V]) CleanUp() {
+	ticker := time.NewTicker(c.CleanupDuration)
+	for {
+		select {
+		case <-ticker.C:
+			c.DeleteExpired()
+		case <-c.stop:
+			ticker.Stop()
+			return
+		}
+	}
+}
+
+func (c *BalancedCache[K, V]) DeleteExpired() {
+	c.Mutex.Lock()
+	defer c.Mutex.Unlock()
+	for key, item := range c.Map {
+		if item.TTL.Before(time.Now()) {
+			delete(c.Map, key)
+		}
+	}
+}
+
+func (c *BalancedCache[K, V]) Stop() {
+	close(c.stop)
 }

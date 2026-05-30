@@ -20,18 +20,18 @@ type ICache[K comparable, V any] interface {
 }
 
 type Cache struct {
-	TTLDuration time.Duration
-	Cleanup     time.Duration
-	Stop        chan struct{}
+	TTLDuration     time.Duration
+	CleanupDuration time.Duration
+	stop            chan struct{}
 }
 
 func NewCache(
 	TTLDuration time.Duration,
-	Cleanup time.Duration) *Cache {
+	CleanupDuration time.Duration) *Cache {
 
 	return &Cache{
-		TTLDuration: TTLDuration,
-		Cleanup:     Cleanup,
-		Stop:        make(chan struct{}),
+		TTLDuration:     TTLDuration,
+		CleanupDuration: CleanupDuration,
+		stop:            make(chan struct{}),
 	}
 }

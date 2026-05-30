@@ -13,11 +13,14 @@ type ReadHeavyCache[K comparable, V any] struct {
 
 func NewReadHeavyCache[K comparable, V any](
 	TTLDuration time.Duration,
-	Cleanup time.Duration) *ReadHeavyCache[K, V] {
+	CleanupDuration time.Duration) *ReadHeavyCache[K, V] {
 
-	return &ReadHeavyCache[K, V]{
-		Cache: *NewCache(TTLDuration, Cleanup),
+	cache := &ReadHeavyCache[K, V]{
+		Cache: *NewCache(TTLDuration, CleanupDuration),
 	}
+
+	go cache.CleanUp()
+	return cache
 }
 
 func (c *ReadHeavyCache[K, V]) Get(key K) (CacheItem[V], bool) {
@@ -45,8 +48,33 @@ func (c *ReadHeavyCache[K, V]) Delete(key K) bool {
 
 func (c *ReadHeavyCache[K, V]) RefreshTTL(key K) {
 	if val, ok := c.Map.Load(key); ok {
-		entry := val.(*CacheItem[V]) // type-assert to your entry type
+		entry := val.(*CacheItem[V])
 		entry.TTL = time.Now().Add(c.TTLDuration)
 		c.Map.Store(key, entry)
 	}
+}
+
+func (c *ReadHeavyCache[K, V]) CleanUp() {
+	ticker := time.NewTicker(c.CleanupDuration)
+	for {
+		select {
+		case <-ticker.C:
+			c.DeleteExpired()
+		case <-c.stop:
+			ticker.Stop()
+			return
+		}
+	}
+}
+
+func (c *ReadHeavyCache[K, V]) DeleteExpired() {
+	for key, item := range c.Map.Range {
+		if item.(*CacheItem[V]).TTL.Before(time.Now()) {
+			c.Map.Delete(key)
+		}
+	}
+}
+
+func (c *ReadHeavyCache[K, V]) Stop() {
+	close(c.stop)
 }
