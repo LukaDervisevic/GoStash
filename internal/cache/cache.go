@@ -1,35 +1,37 @@
 package cache
 
-import "sync"
+import (
+	"time"
+)
 
-type CacheMap struct {
-	Sessions     map[string]Session
-	ChangeStream chan CacheOperation
+type CacheItem[V any] struct {
+	Value V
+	TTL   time.Time
 }
 
-var lock = &sync.Mutex{}
-var instance *CacheMap
+type ICache[K comparable, V any] interface {
+	Get(key K) (CacheItem[V], bool)
+	Put(key K, value CacheItem[V]) bool
+	Delete(key K) bool
+	RefreshTTL(key K)
+	CleanUp()
+	DeleteExpired()
+	Stop()
+}
 
-func getInstance() *CacheMap {
-	if instance == nil {
-		lock.Lock()
-		defer lock.Unlock()
-		instance = &CacheMap{
-			Sessions:     make(map[string]Session),
-			ChangeStream: make(chan CacheOperation),
-		}
+type Cache struct {
+	TTLDuration time.Duration
+	Cleanup     time.Duration
+	Stop        chan struct{}
+}
+
+func NewCache(
+	TTLDuration time.Duration,
+	Cleanup time.Duration) *Cache {
+
+	return &Cache{
+		TTLDuration: TTLDuration,
+		Cleanup:     Cleanup,
+		Stop:        make(chan struct{}),
 	}
-	return instance
-}
-
-type CacheOperation struct {
-	Operation string
-	Key       string
-	Vault     struct{}
-	Reply     chan CacheOperationResult
-}
-
-type CacheOperationResult struct {
-	Value   struct{}
-	Message string
 }
